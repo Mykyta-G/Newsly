@@ -24,7 +24,12 @@ export async function sendLetter(a: Account, letter: Letter, to: string[], test 
       html: renderEmail(letter, brand(a), test ? undefined : unsubscribeUrl(a.id, email)),
     }));
     const { error } = await resend().batch.send(batch);
-    if (error) throw new Error(`Resend: ${error.message}`);
+    if (error) {
+      // Resend's test sender (onboarding@resend.dev) may only mail the Resend account owner.
+      if (/testing email|own email address|verify a domain/i.test(error.message))
+        throw new Error("Email isn’t set up for real sending yet: verify your domain in Resend and set EMAIL_FROM to an address on it. Until then Resend only delivers to the email that owns the Resend account.");
+      throw new Error(`Resend: ${error.message}`);
+    }
     sent += batch.length;
   }
   return sent;
