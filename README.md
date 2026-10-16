@@ -86,15 +86,24 @@ Errors come back as `{ "error": "message in Swedish, safe to show the user" }` w
 5. `src/lib/template.ts` turns the JSON into the email with a fixed template in the customer's colour.
 6. Resend sends one email per recipient, each with its own unsubscribe link.
 
-## Status
+## Status (end of hackathon, 2026-10-16)
 
-- [x] Writer, checker, fix loop, email template, Resend sending, unsubscribe
-- [x] GitHub login (classic OAuth App), tokens encrypted on the server
-- [x] Storage: private Vercel Blob store `newsly-data` (Stockholm), one JSON record per account
-- [x] Deployed on Vercel with all env vars, weekly cron in `vercel.json`
-- [x] Tested on real data: last week's Simple Schedules commits → letter in ~1 min
-- [ ] Email sending only reaches the Resend account owner until a sending domain is verified in Resend
-- [ ] Frontend (Ludvig)
+- [x] Writer → checker → fix loop (gpt-6-luna), fixed email template, Resend sending, unsubscribe (link + one-click)
+- [x] GitHub login (classic OAuth App, `repo` scope), tokens encrypted on the server
+- [x] Storage: private Vercel Blob store `newsly-data` (Stockholm), one JSON record per account / sent letter
+- [x] Deployed on Vercel with all env vars, weekly cron (Mondays 06:00 UTC) in `vercel.json`
+- [x] Frontend: Ludvig's Claude Design (Broadsheet) at `/` in `src/app/newsly.tsx`; compose chat steers the letter
+- [x] Email sends as `Newsly <newsly@koralla.se>` (koralla.se is verified in Resend). Real send to subscribers confirmed arriving.
+- [x] Tested on real data: Simple Schedules commits → letter in ~1 min
+
+### Open / next
+- Test emails to `ludvig@klyro.se` (Google Workspace) didn't show up; the cause is unconfirmed (likely spam filtering).
+  Check Resend → Emails for its status. Workaround: set "Your email" in Settings to a gmail.
+- Give Newsly its own sending domain (`npm run resend-domain -- <domain>`, does DNS itself if the domain is on Vercel);
+  right now it shares koralla.se's reputation.
+- The new design has no review panel, so *why* a letter was flagged isn't shown (data is in `problems` from `/api/letters`).
+- The spec caps letters at 350 words, so "big summary" prompts often land as "Needs review".
+- Storage is last-write-wins per account across server instances; the weekly job runs accounts one by one in ≤5 min.
 
 ## Run locally
 
@@ -102,6 +111,7 @@ Errors come back as `{ "error": "message in Swedish, safe to show the user" }` w
 npm install
 npm run setup        # asks for your keys in the terminal, writes .env.local
 npm run github-oauth # one-time: register the GitHub OAuth App, paste its ID + secret
+npm run resend-domain -- yourdomain.se   # optional: own sending domain
 npm run dev
 ```
 
