@@ -4,7 +4,7 @@ import path from "path";
 import type { ProfileKey } from "./prompts";
 import type { Letter, Problem } from "./newsletter";
 
-// Storage: one private JSON blob per record in Vercel Blob (BLOB_READ_WRITE_TOKEN set),
+// Storage: one private JSON blob per record in Vercel Blob (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN set),
 // or one JSON file per record under data/kv/ locally. Tokens inside are encrypted before they get here.
 
 export type Draft = {
@@ -45,7 +45,7 @@ export type Account = {
 
 type Session = { accountId: string; expires: string };
 
-const blobEnabled = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+const blobEnabled = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
 const DIR = path.join(process.cwd(), "data", "kv");
 const file = (key: string) => path.join(DIR, `${key}.json`);
 
