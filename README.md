@@ -4,14 +4,14 @@
 **Newsly:** tracks your GitHub activity and turns it into a customer-friendly newsletter.
 
 ## Flow
-GitHub (commits, merged PRs, releases) → Claude writes the newsletter → you review → Resend emails your subscribers.
+GitHub (commits, merged PRs, releases) → GPT writes the newsletter → you review → Resend emails your subscribers.
 
 ## Stack
-Next.js 16 (App Router) · Tailwind 4 · Octokit · Anthropic SDK · Resend · JSON-file storage (hackathon)
+Next.js 16 (App Router) · Tailwind 4 · Octokit · OpenAI · Resend · JSON-file storage (hackathon)
 
 ## Run
 ```bash
-cp .env.example .env.local   # fill in keys
+npm run setup   # asks for your keys in the terminal, writes .env.local
 npm run dev
 ```
 
@@ -25,6 +25,6 @@ npm run dev
 
 ## Layout
 - `src/lib/github.ts` — fetch activity
-- `src/lib/newsletter.ts` — Claude prompt → `{ subject, html }`
+- `src/lib/newsletter.ts` — GPT prompt → `{ subject, html }`
 - `src/lib/email.ts` — Resend batch send
 - `src/lib/store.ts` — subscribers (`data/subscribers.json`)
