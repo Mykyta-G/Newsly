@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Newsly
 
-## Getting Started
+**Problem:** you ship updates, but your customers don't know about them.
+**Newsly:** tracks your GitHub activity and turns it into a customer-friendly newsletter.
 
-First, run the development server:
+## Flow
+GitHub (commits, merged PRs, releases) → Claude writes the newsletter → you review → Resend emails your subscribers.
 
+## Stack
+Next.js 16 (App Router) · Tailwind 4 · Octokit · Anthropic SDK · Resend · JSON-file storage (hackathon)
+
+## Run
 ```bash
+cp .env.example .env.local   # fill in keys
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## API
+| Route | What it does |
+|---|---|
+| `GET /api/activity?repo=owner/name&days=7` | Raw GitHub activity |
+| `POST /api/subscribe` `{ email }` | Add a subscriber |
+| `POST /api/newsletter/preview` `{ repo?, days?, productName? }` | Draft newsletter, sends nothing |
+| `POST /api/newsletter/send` `{ subject, html }` | Send the draft to all subscribers |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Layout
+- `src/lib/github.ts` — fetch activity
+- `src/lib/newsletter.ts` — Claude prompt → `{ subject, html }`
+- `src/lib/email.ts` — Resend batch send
+- `src/lib/store.ts` — subscribers (`data/subscribers.json`)
