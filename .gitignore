@@ -41,5 +41,5 @@ yarn-error.log*
 next-env.d.ts
 
 # local subscriber store
-/data/*.json
+/data/
 !.env.example

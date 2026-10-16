@@ -28,16 +28,18 @@ ask() { # ask KEY "label" default secret?
 }
 
 echo "Newsly setup — Enter keeps the value in brackets."
-gh_token=$(gh auth token 2>/dev/null || true)
-ask GITHUB_TOKEN   "GitHub token (auto-filled from gh if logged in)" "$gh_token" secret
-ask GITHUB_REPO    "Repo to track (owner/name)" ""
 ask OPENAI_API_KEY "OpenAI API key" "" secret
-ask OPENAI_MODEL   "OpenAI model" "gpt-5.5"
+ask OPENAI_MODEL   "OpenAI model" "gpt-6-luna"
 ask RESEND_API_KEY "Resend API key" "" secret
-ask EMAIL_FROM     "From address" "Newsly <onboarding@resend.dev>"
+ask EMAIL_FROM     "From address, like: Newsly <news@yourdomain.se>" "Newsly <onboarding@resend.dev>"
+ask APP_URL        "App URL" "http://localhost:3000"
+# Server secrets: generated once, never asked.
+[ -n "$(current ENCRYPTION_KEY)" ] || save ENCRYPTION_KEY "$(openssl rand -hex 32)"
+[ -n "$(current CRON_SECRET)" ]    || save CRON_SECRET "$(openssl rand -base64 32 | tr -d '/+=')"
+[ -n "$(current GITHUB_CLIENT_ID)" ] || echo "GitHub App not set up yet: run  npm run github-app"
 
 echo
 echo "Saved to $ENV:"
 while IFS='=' read -r k v; do
-  case $k in *KEY*|*TOKEN*) [ ${#v} -gt 2 ] && echo "  $k = set" || echo "  $k = MISSING" ;; *) echo "  $k = $v" ;; esac
+  case $k in *KEY*|*TOKEN*|*SECRET*) [ ${#v} -gt 2 ] && echo "  $k = set" || echo "  $k = MISSING" ;; *) echo "  $k = $v" ;; esac
 done < "$ENV"

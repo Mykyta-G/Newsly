@@ -7,9 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "setup": "bash scripts/setup.sh"
+    "setup": "bash scripts/setup.sh",
+    "github-app": "node scripts/create-github-app.mjs"
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.2",
     "next": "16.4.2",
     "octokit": "^5.0.5",
     "openai": "^7.34.0",
