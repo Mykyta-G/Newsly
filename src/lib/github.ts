@@ -2,8 +2,10 @@ import { Octokit } from "octokit";
 import { decrypt, encrypt } from "./crypto";
 import { updateAccount, type Account } from "./db";
 
-// Login + repo access go through a GitHub *App* (not an OAuth App): it's the only GitHub login that can be
-// read-only AND limited to the repos the customer picks. App permissions: Contents = Read-only, nothing else.
+// Login + repo access through a classic GitHub OAuth App. GitHub has no read-only scope for private repos, so the
+// token gets `repo` (read AND write). Newsly itself only ever makes GET calls for commit messages and dates,
+// and only for the repos the customer picks in Newsly.
+const SCOPES = "repo read:user user:email";
 
 const CLIENT_ID = () => process.env.GITHUB_CLIENT_ID ?? "";
 const CLIENT_SECRET = () => process.env.GITHUB_CLIENT_SECRET ?? "";
@@ -13,11 +15,12 @@ export const authorizeUrl = (state: string) =>
   `https://github.com/login/oauth/authorize?${new URLSearchParams({
     client_id: CLIENT_ID(),
     redirect_uri: `${appUrl()}/api/auth/callback`,
+    scope: SCOPES,
     state,
   })}`;
 
-/** Where the customer picks which repos Newsly may read. */
-export const installUrl = () => `https://github.com/apps/${process.env.GITHUB_APP_SLUG}/installations/new`;
+/** GitHub's page where the customer can see or revoke Newsly's access. */
+export const accessSettingsUrl = () => `https://github.com/settings/connections/applications/${CLIENT_ID()}`;
 
 type TokenResponse = { access_token?: string; refresh_token?: string; expires_in?: number; error?: string; error_description?: string };
 
@@ -55,22 +58,19 @@ export async function userToken(a: Account): Promise<string> {
 export async function githubUser(token: string) {
   const gh = new Octokit({ auth: token });
   const { data } = await gh.rest.users.getAuthenticated();
-  // Primary verified email (needs the app's "Email addresses: read" permission) so test mails need no setup.
+  // Primary verified email (the user:email scope) so test mails need no setup.
   const emails = await gh.rest.users.listEmailsForAuthenticatedUser().then((r) => r.data).catch(() => []);
   const email = emails.find((e) => e.primary && e.verified)?.email ?? data.email ?? "";
   return { ...data, email };
 }
 
-/** Repos the customer has granted the app (via the install screen). */
-export async function grantedRepos(token: string): Promise<string[]> {
+/** Every repo the customer can see on GitHub, most recently pushed first, so they can pick which to track. */
+export async function accessibleRepos(token: string): Promise<{ fullName: string; private: boolean; pushedAt: string | null }[]> {
   const gh = new Octokit({ auth: token });
-  const installs = await gh.paginate(gh.rest.apps.listInstallationsForAuthenticatedUser, { per_page: 100 });
-  const repos = await Promise.all(
-    installs.map((i) =>
-      gh.paginate(gh.rest.apps.listInstallationReposForAuthenticatedUser, { installation_id: i.id, per_page: 100 }),
-    ),
-  );
-  return repos.flat().map((r) => r.full_name).sort();
+  const repos = await gh.paginate(gh.rest.repos.listForAuthenticatedUser, {
+    affiliation: "owner,collaborator,organization_member", sort: "pushed", per_page: 100,
+  });
+  return repos.map((r) => ({ fullName: r.full_name, private: r.private, pushedAt: r.pushed_at ?? null }));
 }
 
 const isBot = (login?: string | null, type?: string | null) => type === "Bot" || /\[bot\]$/i.test(login ?? "");

@@ -1,10 +1,13 @@
+import { after } from "next/server";
 import { z } from "zod";
 import { decrypt } from "@/lib/crypto";
 import { deleteAccount, updateAccount } from "@/lib/db";
-import { defaultProfile } from "@/lib/drafts";
+import { defaultProfile, draftAndTest, lastSevenDays } from "@/lib/drafts";
 import { revokeGrant } from "@/lib/github";
 import { PROFILES } from "@/lib/prompts";
 import { currentAccount, endSession, publicAccount } from "@/lib/session";
+
+export const maxDuration = 300; // the first letter is written in the background after a PATCH
 
 const unauthorized = () => Response.json({ error: "Inte inloggad" }, { status: 401 });
 
@@ -44,6 +47,15 @@ export async function PATCH(request: Request) {
   if (p.requireApproval === false && !a.approvedOnce) p.requireApproval = true;
   if (p.subscribers) p.subscribers = [...new Set(p.subscribers.map((e) => e.toLowerCase()))];
   const updated = await updateAccount(a.id, (x) => void Object.assign(x, p));
+
+  // First time there's something to write from → write the first letter (last 7 days) and email it as a test.
+  const hasInput = updated.source === "github" ? updated.repos.length > 0 : updated.manualNotes.trim() !== "";
+  const firstTime = !updated.draft && !updated.lastLetter && updated.job?.state !== "running";
+  if (hasInput && firstTime && (p.repos || p.manualNotes || p.source)) {
+    const { from, to } = lastSevenDays();
+    after(() => draftAndTest(updated, from, to).catch(console.error));
+    return Response.json({ ...publicAccount(updated), job: { state: "running", at: new Date().toISOString() } });
+  }
   return Response.json(publicAccount(updated));
 }
 

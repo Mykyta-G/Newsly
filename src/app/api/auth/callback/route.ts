@@ -1,13 +1,9 @@
-import { after } from "next/server";
 import { cookies } from "next/headers";
 import { safeEqual } from "@/lib/crypto";
 import { createAccount, getAccount, updateAccount } from "@/lib/db";
-import { draftAndTest, lastSevenDays } from "@/lib/drafts";
-import { appUrl, exchangeCode, githubUser, grantedRepos, installUrl, tokenFields } from "@/lib/github";
+import { appUrl, exchangeCode, githubUser, tokenFields } from "@/lib/github";
 import { PROFILES } from "@/lib/prompts";
 import { startSession } from "@/lib/session";
-
-export const maxDuration = 300; // the first draft is written in the background after the redirect
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -31,15 +27,8 @@ export async function GET(request: Request) {
       requireApproval: true, approvedOnce: false, draft: null, lastLetter: null, createdAt: new Date().toISOString(),
     });
   }
-  const account = await updateAccount(id, (a) => void Object.assign(a, { login: user.login, email: a.email || user.email, ...tokenFields(token) }));
+  await updateAccount(id, (a) => void Object.assign(a, { login: user.login, email: a.email || user.email, ...tokenFields(token) }));
   await startSession(id);
-
-  // Not granted any repos yet → straight to GitHub's "pick repos" screen. It returns to /api/github/installed.
-  const repos = await grantedRepos(token.access_token!).catch(() => []);
-  if (repos.length === 0) return Response.redirect(installUrl());
-  if (account.repos.length === 0) {
-    const ready = await updateAccount(id, (a) => void (a.repos = repos));
-    if (!ready.draft && !ready.lastLetter) { const { from, to } = lastSevenDays(); after(() => draftAndTest(ready, from, to).catch(console.error)); }
-  }
+  // Next: the frontend shows GET /api/repos and the customer picks; PATCH /api/me { repos } starts the first letter.
   return Response.redirect(`${appUrl()}/dashboard`);
 }

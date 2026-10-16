@@ -36,7 +36,7 @@ ask APP_URL        "App URL" "http://localhost:3000"
 # Server secrets: generated once, never asked.
 [ -n "$(current ENCRYPTION_KEY)" ] || save ENCRYPTION_KEY "$(openssl rand -hex 32)"
 [ -n "$(current CRON_SECRET)" ]    || save CRON_SECRET "$(openssl rand -base64 32 | tr -d '/+=')"
-[ -n "$(current GITHUB_CLIENT_ID)" ] || echo "GitHub App not set up yet: run  npm run github-app"
+[ -n "$(current GITHUB_CLIENT_ID)" ] || echo "GitHub login not set up yet: run  npm run github-oauth"
 
 echo
 echo "Saved to $ENV:"

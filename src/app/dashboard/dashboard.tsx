@@ -28,12 +28,19 @@ export default function Dashboard({ initial, defaultPeriod }: { initial: Me; def
     brandColor: initial.brandColor, email: initial.email, manualNotes: initial.manualNotes,
     subscribers: initial.subscribers.join("\n"),
   });
-  const [granted, setGranted] = useState<{ repos: string[]; installUrl: string; error?: string } | null>(null);
+  const [granted, setGranted] = useState<{ repos: { fullName: string; private: boolean }[]; accessSettingsUrl: string; error?: string } | null>(null);
   const [period, setPeriod] = useState(defaultPeriod);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [override, setOverride] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // While the first letter is being written in the background, check back every few seconds.
+  useEffect(() => {
+    if (me.job?.state !== "running") return;
+    const t = setInterval(() => fetch("/api/me").then((r) => r.json()).then(setMe).catch(() => {}), 4000);
+    return () => clearInterval(t);
+  }, [me.job?.state]);
 
   useEffect(() => {
     fetch("/api/repos").then((r) => r.json()).then(setGranted).catch(() => {});
@@ -72,6 +79,8 @@ export default function Dashboard({ initial, defaultPeriod }: { initial: Me; def
         </div>
       </header>
 
+      {me.job?.state === "running" && <p className="rounded-lg bg-indigo-50 px-4 py-2 text-sm text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">Skriver ditt första brev… (ungefär en minut, du får ett testmejl)</p>}
+      {me.job?.state === "failed" && <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">Brevet kunde inte skrivas: {me.job.error}</p>}
       {msg && <p className={`rounded-lg px-4 py-2 text-sm ${msg.ok ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" : "bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200"}`}>{msg.text}</p>}
 
       <section className={card}>
@@ -102,14 +111,16 @@ export default function Dashboard({ initial, defaultPeriod }: { initial: Me; def
         </div>
         {me.source === "github" ? (
           <div className="space-y-2 text-sm">
-            <p className="text-zinc-500">Newsly kan bara <b>läsa</b> commit-texter och datum, och bara i repon du har valt. Ingen kod läses, inget skrivs.</p>
-            {granted?.repos.length ? granted.repos.map((r) => (
+            <p className="text-zinc-500">Newsly läser bara commit-texter och datum, och bara i repon du bockar i. Ingen kod läses, inget skrivs.</p>
+            <div className="max-h-64 space-y-1 overflow-auto">
+            {granted?.repos.length ? granted.repos.map(({ fullName: r }) => (
               <label key={r} className="flex items-center gap-2">
                 <input type="checkbox" checked={me.repos.includes(r)} onChange={(e) => save({ repos: e.target.checked ? [...me.repos, r] : me.repos.filter((x) => x !== r) }, e.target.checked ? `${r} kopplat.` : `${r} bortkopplat.`)} />
                 {r}
               </label>
-            )) : <p>{granted?.error ?? (granted ? "Inga repon har gett åtkomst ännu." : "Laddar…")}</p>}
-            {granted && <a className="inline-block text-indigo-600 underline" href={granted.installUrl}>Välj vilka repon Newsly får läsa (eller ta bort åtkomst) på GitHub</a>}
+            )) : <p>{granted?.error ?? (granted ? "Inga repon hittades." : "Laddar…")}</p>}
+            </div>
+            {granted && <a className="inline-block text-indigo-600 underline" href={granted.accessSettingsUrl}>Se eller ta bort Newslys åtkomst på GitHub</a>}
           </div>
         ) : (
           <>

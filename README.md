@@ -9,9 +9,10 @@ weekly letter about what *they* gain. No jargon, nothing made up.
 ## The flow
 
 1. **Welcome** → "Log in with GitHub".
-2. **Connect** → on GitHub, the customer picks which repos Newsly may read. Read-only, only those repos, and only
-   commit messages + dates (never code or files).
-3. **Done.** Right after connecting, Newsly writes the first letter from the last 7 days in the background and emails
+2. **Connect** → GitHub's normal "Authorize Newsly" screen, then the customer ticks which repos to track in Newsly.
+   Newsly only reads commit messages + dates of those repos (never code or files). Note: it's a classic OAuth App,
+   so GitHub's token itself has the `repo` scope (read+write on private repos); Newsly's code only makes read calls.
+3. **Done.** As soon as the first repo is ticked, Newsly writes the first letter from the last 7 days in the background and emails
    it to the customer as a test (their GitHub email). Every Monday 06:00 UTC it does the same for last week.
    A second AI pass checks every letter for tech words and made-up claims before anything goes out.
 4. **The first letter needs a nod:** the customer gets a test email, looks at it, and approves. After that they can switch
@@ -37,11 +38,10 @@ Errors come back as `{ "error": "message in Swedish, safe to show the user" }` w
 | `GET /api/me` | The logged-in account (see shape below). `401` = not logged in → show Welcome. Poll it while `job.state === "running"` (first letter being written, ~1 min). |
 | `PATCH /api/me` | Save any account fields (all optional): `email, profileKey, companyName, profileText, brandColor, source, repos, manualNotes, subscribers, requireApproval`. Returns the updated account. |
 | `DELETE /api/me` | Delete the account and revoke GitHub access. |
-| `GET /api/repos` | `{ repos: ["owner/name"], installUrl }`. Repos the customer granted on GitHub. `installUrl` = "pick repos / remove access" link. |
+| `GET /api/repos` | `{ repos: [{ fullName, private, pushedAt }], tracked: string[], accessSettingsUrl }`. Every repo the customer can see, most recent first, to tick. Save the choice with `PATCH /api/me { repos }`; the first save starts the first letter. |
 | `POST /api/draft` `{ from, to }` | Write + review a new letter for the period (`YYYY-MM-DD`) and email it to the customer as a test. Takes up to a minute. Returns the draft. |
 | `POST /api/draft/test` | Re-send the current draft to the customer's own address. |
 | `POST /api/draft/approve` `{ createdAt, override? }` | Send the draft to all subscribers. Needs a test email first; `override: true` only if the draft failed review. |
-| `GET /api/github/installed` | Where GitHub sends people after they pick repos. Not for the UI. |
 | `GET /api/unsubscribe?…` | The link inside each email. Not for the UI. |
 | `GET /api/cron/weekly` | Weekly job, run by Vercel Cron. Not for the UI. |
 
@@ -89,7 +89,7 @@ Errors come back as `{ "error": "message in Swedish, safe to show the user" }` w
 ## Status
 
 - [x] Writer, checker, fix loop, email template, Resend sending, unsubscribe
-- [x] GitHub login + read-only repo access (GitHub App), tokens encrypted on the server
+- [x] GitHub login (classic OAuth App), tokens encrypted on the server
 - [x] Storage: private Vercel Blob store `newsly-data` (Stockholm), one JSON record per account
 - [x] Deployed on Vercel with all env vars, weekly cron in `vercel.json`
 - [x] Tested on real data: last week's Simple Schedules commits → letter in ~1 min
@@ -101,7 +101,7 @@ Errors come back as `{ "error": "message in Swedish, safe to show the user" }` w
 ```bash
 npm install
 npm run setup        # asks for your keys in the terminal, writes .env.local
-npm run github-app -- https://newsly-neon.vercel.app   # one-time: creates the GitHub App (one click)
+npm run github-oauth # one-time: register the GitHub OAuth App, paste its ID + secret
 npm run dev
 ```
 

@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "setup": "bash scripts/setup.sh",
-    "github-app": "node scripts/create-github-app.mjs"
+    "github-oauth": "bash scripts/github-oauth.sh"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.2",
