@@ -22,7 +22,7 @@ export const profileFor = (a: Account) => a.profileText.trim() || defaultProfile
 
 export async function gatherUnderlag(a: Account, from: string, to: string) {
   if (a.source === "manual") return a.manualNotes.trim();
-  if (a.repos.length === 0) throw new Error("Välj minst ett repo först.");
+  if (a.repos.length === 0) throw new Error("Pick at least one repo first.");
   return commitUnderlag(await userToken(a), a.repos, from, to);
 }
 

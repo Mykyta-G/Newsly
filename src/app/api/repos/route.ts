@@ -4,7 +4,7 @@ import { currentAccount } from "@/lib/session";
 /** Repos the customer can pick from (most recently active first), plus GitHub's page for revoking access. */
 export async function GET() {
   const a = await currentAccount();
-  if (!a) return Response.json({ error: "Inte inloggad" }, { status: 401 });
+  if (!a) return Response.json({ error: "Not logged in" }, { status: 401 });
   try {
     return Response.json({ repos: await accessibleRepos(await userToken(a)), tracked: a.repos, accessSettingsUrl: accessSettingsUrl() });
   } catch (e) {

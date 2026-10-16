@@ -5,9 +5,9 @@ import { currentAccount } from "@/lib/session";
 /** Re-send the current draft to the customer's own address only. */
 export async function POST() {
   const a = await currentAccount();
-  if (!a) return Response.json({ error: "Inte inloggad" }, { status: 401 });
-  if (!a.draft) return Response.json({ error: "Inget utkast" }, { status: 400 });
-  if (!a.email) return Response.json({ error: "Fyll i din e-post för testmejl först." }, { status: 400 });
+  if (!a) return Response.json({ error: "Not logged in" }, { status: 401 });
+  if (!a.draft) return Response.json({ error: "No draft" }, { status: 400 });
+  if (!a.email) return Response.json({ error: "Add your email for test letters in Settings first." }, { status: 400 });
   try {
     await sendLetter(a, a.draft.letter, [a.email], true);
     await updateAccount(a.id, (x) => void (x.draft && (x.draft.testSentAt = new Date().toISOString())));

@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const store = await cookies();
   const expected = store.get("newsly_oauth_state")?.value ?? "";
   store.delete("newsly_oauth_state");
-  if (!code || !expected || !safeEqual(state, expected)) return Response.redirect(`${appUrl()}/dashboard`);
+  if (!code || !expected || !safeEqual(state, expected)) return Response.redirect(`${appUrl()}/`);
 
   let token, user;
   try {
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     user = await githubUser(token.access_token!);
   } catch (e) {
     console.error("GitHub login failed:", e);
-    return Response.redirect(`${appUrl()}/?error=${encodeURIComponent("Inloggningen med GitHub misslyckades. Försök igen.")}`);
+    return Response.redirect(`${appUrl()}/?error=${encodeURIComponent("Logging in with GitHub failed. Please try again.")}`);
   }
   const id = String(user.id);
 
@@ -36,5 +36,5 @@ export async function GET(request: Request) {
   await updateAccount(id, (a) => void Object.assign(a, { login: user.login, email: a.email || user.email, ...tokenFields(token) }));
   await startSession(id);
   // Next: the frontend shows GET /api/repos and the customer picks; PATCH /api/me { repos } starts the first letter.
-  return Response.redirect(`${appUrl()}/dashboard`);
+  return Response.redirect(`${appUrl()}/`);
 }

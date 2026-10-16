@@ -88,7 +88,7 @@ export async function writeLetter(opts: {
   to: string;
   previous: Letter | null;
 }): Promise<Result> {
-  if (!opts.underlag.trim()) throw new Error("Det finns inget underlag för perioden, så det blir inget brev.");
+  if (!opts.underlag.trim()) throw new Error("Nothing happened in those repos during this period, so there is nothing to write about.");
   const system = fill(SYSTEMPROMPT, { kundprofil: opts.profileText });
   const messages: Msg[] = [
     {

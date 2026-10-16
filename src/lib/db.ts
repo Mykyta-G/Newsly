@@ -115,7 +115,7 @@ export const deleteAccount = (id: string) => locked(acc(id), () => kvDel(acc(id)
 export function updateAccount(id: string, fn: (a: Account) => void): Promise<Account> {
   return locked(acc(id), async () => {
     const a = await kvGet<Account>(acc(id));
-    if (!a) throw new Error("Kontot finns inte");
+    if (!a) throw new Error("Account not found");
     fn(a);
     await kvPut(acc(id), a);
     return a;

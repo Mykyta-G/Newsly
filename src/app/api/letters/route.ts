@@ -56,7 +56,7 @@ function shape(a: Account, l: Draft | SentLetter) {
 
 export async function GET() {
   const a = await currentAccount();
-  if (!a) return Response.json({ error: "Inte inloggad" }, { status: 401 });
+  if (!a) return Response.json({ error: "Not logged in" }, { status: 401 });
   const sent = await listSentLetters(a.id);
   return Response.json([...(a.draft ? [shape(a, a.draft)] : []), ...sent.map((l) => shape(a, l))]);
 }

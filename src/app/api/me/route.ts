@@ -9,7 +9,7 @@ import { currentAccount, endSession, publicAccount } from "@/lib/session";
 
 export const maxDuration = 300; // the first letter is written in the background after a PATCH
 
-const unauthorized = () => Response.json({ error: "Inte inloggad" }, { status: 401 });
+const unauthorized = () => Response.json({ error: "Not logged in" }, { status: 401 });
 
 export async function GET() {
   const a = await currentAccount();
@@ -34,7 +34,7 @@ export async function PATCH(request: Request) {
   const a = await currentAccount();
   if (!a) return unauthorized();
   const parsed = Patch.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Ogiltiga värden" }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Invalid values" }, { status: 400 });
   const p = parsed.data;
   // Picking a preset fills in its profile text, name and colour.
   if (p.profileKey && p.profileKey !== "custom" && p.profileKey !== a.profileKey) {
@@ -53,8 +53,10 @@ export async function PATCH(request: Request) {
   const firstTime = !updated.draft && !updated.lastLetter && updated.job?.state !== "running";
   if (hasInput && firstTime && (p.repos || p.manualNotes || p.source)) {
     const { from, to } = lastSevenDays();
-    after(() => draftAndTest(updated, from, to).catch(console.error));
-    return Response.json({ ...publicAccount(updated), job: { state: "running", at: new Date().toISOString() } });
+    // Mark it before replying so the UI's very next GET /api/me already says "writing…".
+    const marked = await updateAccount(a.id, (x) => void (x.job = { state: "running", at: new Date().toISOString() }));
+    after(() => draftAndTest(marked, from, to).catch(console.error));
+    return Response.json(publicAccount(marked));
   }
   return Response.json(publicAccount(updated));
 }

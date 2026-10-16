@@ -47,7 +47,7 @@ export function tokenFields(t: TokenResponse) {
 
 /** The customer's GitHub token, refreshed if it has expired. Server-side only. */
 export async function userToken(a: Account): Promise<string> {
-  if (!a.tokenEnc) throw new Error("GitHub är inte kopplat");
+  if (!a.tokenEnc) throw new Error("GitHub is not connected");
   if (!a.tokenExpiresAt || a.tokenExpiresAt > new Date().toISOString() || !a.refreshEnc) return decrypt(a.tokenEnc);
   const t = await tokenRequest({ grant_type: "refresh_token", refresh_token: decrypt(a.refreshEnc) });
   const fields = tokenFields(t);

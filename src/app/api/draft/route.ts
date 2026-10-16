@@ -9,9 +9,9 @@ const Body = z.object({ from: z.iso.date(), to: z.iso.date() });
 /** Write + review a fresh draft for the period (replaces any unsent draft). No email; the UI has a test button. */
 export async function POST(request: Request) {
   const a = await currentAccount();
-  if (!a) return Response.json({ error: "Inte inloggad" }, { status: 401 });
+  if (!a) return Response.json({ error: "Not logged in" }, { status: 401 });
   const parsed = Body.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "Ange från- och till-datum." }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: "Pick a from and to date." }, { status: 400 });
   try {
     return Response.json(await draftAndTest(a, parsed.data.from, parsed.data.to, false));
   } catch (e) {
