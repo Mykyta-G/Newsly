@@ -9,7 +9,8 @@ const SCOPES = "repo read:user user:email";
 
 const CLIENT_ID = () => process.env.GITHUB_CLIENT_ID ?? "";
 const CLIENT_SECRET = () => process.env.GITHUB_CLIENT_SECRET ?? "";
-export const appUrl = () => (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+import { appUrl } from "./url";
+export { appUrl };
 
 export const authorizeUrl = (state: string) =>
   `https://github.com/login/oauth/authorize?${new URLSearchParams({

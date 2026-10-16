@@ -1,7 +1,7 @@
 import { safeEqual, sign } from "@/lib/crypto";
 import { getAccount, updateAccount } from "@/lib/db";
 
-export async function GET(request: Request) {
+async function unsubscribe(request: Request) {
   const q = new URL(request.url).searchParams;
   const a = q.get("a") ?? "", e = q.get("e") ?? "", s = q.get("s") ?? "";
   const ok = Boolean(a && e && safeEqual(s, sign(`${a}:${e}`)));
@@ -11,3 +11,7 @@ export async function GET(request: Request) {
     { headers: { "Content-Type": "text/html; charset=utf-8" } },
   );
 }
+
+export const GET = unsubscribe;
+/** One-click unsubscribe (RFC 8058): mail clients POST to the List-Unsubscribe URL. */
+export const POST = unsubscribe;

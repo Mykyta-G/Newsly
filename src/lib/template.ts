@@ -7,11 +7,12 @@ const paras = (s: string, style: string) =>
 
 const P = "margin:0 0 14px;font-size:16px;line-height:1.6;color:#1f2328;";
 
-export function renderEmail(l: Letter, brand: { companyName: string; color: string }, unsubscribeUrl?: string) {
+export function renderEmail(l: Letter, brand: { companyName: string; color: string }, unsubscribeUrl?: string, test = false) {
   const color = /^#[0-9a-f]{6}$/i.test(brand.color) ? brand.color : "#4361EE";
   return `<!doctype html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(l.subject)}</title></head>
 <body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,'Segoe UI',Inter,Arial,sans-serif;">
 <span style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(l.preheader)}</span>
+${test ? `<div style="background:#fff7d6;color:#5c4a00;font-size:13px;padding:10px 16px;text-align:center;">Testutskick: bara du ser det här. Godkänn i Newsly för att skicka till alla.</div>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;"><tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background:#ffffff;border-radius:12px;overflow:hidden;">
 <tr><td style="background:${color};padding:20px 28px;color:#ffffff;font-size:20px;font-weight:700;">${esc(brand.companyName)}</td></tr>
