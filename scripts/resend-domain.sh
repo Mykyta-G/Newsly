@@ -20,15 +20,33 @@ if [ -z "$ID" ]; then
   echo "Registered $DOMAIN in Resend."
 fi
 
-echo; echo "Add these DNS records at your domain host (where $DOMAIN's DNS lives):"
-api "https://api.resend.com/domains/$ID" | python3 -c '
+echo; echo "DNS records Resend needs:"
+RECORDS=$(api "https://api.resend.com/domains/$ID")
+printf '%s' "$RECORDS" | python3 -c '
 import json,sys
 d=json.load(sys.stdin)
 for r in d.get("records",[]):
-    print(f"  {r[\"type\"]:5} name: {r[\"name\"]:28} value: {r[\"value\"]}" + (f"   priority: {r[\"priority\"]}" if r.get("priority") is not None else "") + f"   [{r.get(\"status\")}]")
-print("  status:", d.get("status"))'
-echo
-read -rp "Press Enter once the records are added (DNS can take a few minutes)… " _
+    print(f"  {r[\"type\"]:5} {r[\"name\"]:28} {r[\"value\"][:60]}" + (f"  prio {r[\"priority\"]}" if r.get("priority") is not None else "") + f"  [{r.get(\"status\")}]")'
+
+# If the apex domain's DNS is on Vercel, add the records there automatically.
+APEX=$(printf '%s' "$DOMAIN" | awk -F. '{print $(NF-1)"."$NF}')
+if vercel domains inspect "$APEX" 2>&1 | grep -qi "vercel-dns"; then
+  echo; echo "$APEX's DNS is on Vercel, adding the records there…"
+  printf '%s' "$RECORDS" | python3 -c '
+import json,sys
+apex=sys.argv[1]; dom=sys.argv[2]
+for r in json.load(sys.stdin).get("records",[]):
+    name=r["name"]
+    full=name if name.endswith(apex) else (f"{name}.{dom}" if dom!=apex else name)
+    sub=full[:-len(apex)-1] if full.endswith("."+apex) else ("" if full==apex else full)
+    print("\t".join([sub, r["type"], r["value"], str(r.get("priority") or "")]))' "$APEX" "$DOMAIN" | while IFS=$'\t' read -r SUB TYPE VALUE PRIO; do
+    if [ "$TYPE" = "MX" ]; then vercel dns add "$APEX" "$SUB" MX "$VALUE" "$PRIO" >/dev/null 2>&1; else vercel dns add "$APEX" "$SUB" "$TYPE" "$VALUE" >/dev/null 2>&1; fi \
+      && echo "  added $TYPE $SUB" || echo "  $TYPE $SUB: not added (already there?)"
+  done
+else
+  echo; read -rp "Add the records above at your DNS host, then press Enter… " _
+fi
+echo "Waiting for Resend to verify (DNS can take a few minutes)…"
 for i in $(seq 1 30); do
   api -X POST "https://api.resend.com/domains/$ID/verify" >/dev/null
   S=$(api "https://api.resend.com/domains/$ID" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("status",""))')
