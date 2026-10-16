@@ -14,8 +14,14 @@ export async function GET(request: Request) {
   store.delete("newsly_oauth_state");
   if (!code || !expected || !safeEqual(state, expected)) return Response.redirect(`${appUrl()}/dashboard`);
 
-  const token = await exchangeCode(code);
-  const user = await githubUser(token.access_token!);
+  let token, user;
+  try {
+    token = await exchangeCode(code);
+    user = await githubUser(token.access_token!);
+  } catch (e) {
+    console.error("GitHub login failed:", e);
+    return Response.redirect(`${appUrl()}/?error=${encodeURIComponent("Inloggningen med GitHub misslyckades. Försök igen.")}`);
+  }
   const id = String(user.id);
 
   if (!(await getAccount(id))) {

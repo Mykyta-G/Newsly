@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { decrypt } from "@/lib/crypto";
-import { deleteAccount, updateAccount } from "@/lib/db";
+import { deleteAccount, deleteSentLetters, updateAccount } from "@/lib/db";
 import { defaultProfile, draftAndTest, lastSevenDays } from "@/lib/drafts";
 import { revokeGrant } from "@/lib/github";
 import { PROFILES } from "@/lib/prompts";
@@ -64,6 +64,7 @@ export async function DELETE() {
   const a = await currentAccount();
   if (!a) return unauthorized();
   if (a.tokenEnc) await revokeGrant(decrypt(a.tokenEnc)).catch(() => {});
+  await deleteSentLetters(a.id);
   await deleteAccount(a.id);
   await endSession();
   return Response.json({ ok: true });

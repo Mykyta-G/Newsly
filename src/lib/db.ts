@@ -43,6 +43,9 @@ export type Account = {
   createdAt: string;
 };
 
+/** A letter that went out. Kept so the UI can show history and the writer can avoid repeating itself. */
+export type SentLetter = Omit<Draft, "status" | "testSentAt"> & { status: "sent"; sentAt: string; recipients: number };
+
 type Session = { accountId: string; expires: string };
 
 const blobEnabled = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
@@ -122,6 +125,16 @@ export function updateAccount(id: string, fn: (a: Account) => void): Promise<Acc
 export async function listAccounts(): Promise<Account[]> {
   const keys = await kvKeys("accounts");
   return (await Promise.all(keys.map((k) => kvGet<Account>(k)))).filter((a): a is Account => a !== null);
+}
+
+export const saveSentLetter = (accountId: string, l: SentLetter) => kvPut(`letters/${accountId}/${l.createdAt.replace(/[:.]/g, "-")}`, l);
+export async function listSentLetters(accountId: string): Promise<SentLetter[]> {
+  const keys = await kvKeys(`letters/${accountId}`);
+  const all = await Promise.all(keys.map((k) => kvGet<SentLetter>(k)));
+  return all.filter((l): l is SentLetter => l !== null).sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+}
+export async function deleteSentLetters(accountId: string) {
+  await Promise.all((await kvKeys(`letters/${accountId}`)).map(kvDel));
 }
 
 export const getSession = (id: string) => kvGet<Session>(`sessions/${id}`);

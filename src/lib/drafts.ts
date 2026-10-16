@@ -1,4 +1,4 @@
-import { updateAccount, type Account, type Draft } from "./db";
+import { saveSentLetter, updateAccount, type Account, type Draft } from "./db";
 import { sendLetter } from "./email";
 import { commitUnderlag, userToken } from "./github";
 import { writeLetter } from "./newsletter";
@@ -39,11 +39,14 @@ export async function makeDraft(a: Account, from: string, to: string): Promise<D
   return draft;
 }
 
-/** Draft → test email to the customer, tracked in `account.job`. Returns the draft with testSentAt set if mailed. */
-export async function draftAndTest(a: Account, from: string, to: string): Promise<Draft> {
+/**
+ * Write a draft, tracked in `account.job` so the UI can show "writing…" or the error.
+ * With `test` (first letter, weekly job) it's also emailed to the customer; the UI's "New letter" leaves that to them.
+ */
+export async function draftAndTest(a: Account, from: string, to: string, test = true): Promise<Draft> {
   await updateAccount(a.id, (x) => void (x.job = { state: "running", at: new Date().toISOString() }));
   try {
-    const d = await draftAndTestInner(a, from, to);
+    const d = test ? await draftAndTestInner(a, from, to) : await makeDraft(a, from, to);
     await updateAccount(a.id, (x) => void (x.job = null));
     return d;
   } catch (e) {
@@ -59,4 +62,16 @@ async function draftAndTestInner(a: Account, from: string, to: string): Promise<
   const testSentAt = new Date().toISOString();
   await updateAccount(a.id, (x) => void (x.draft && x.draft.createdAt === draft.createdAt && (x.draft.testSentAt = testSentAt)));
   return { ...draft, testSentAt };
+}
+
+/** After a successful send: move the draft into history and remember it as "last letter". */
+export async function archiveSent(a: Account, draft: Draft, recipients: number) {
+  const { testSentAt, status, ...rest } = draft;
+  void testSentAt; void status;
+  await saveSentLetter(a.id, { ...rest, status: "sent", sentAt: new Date().toISOString(), recipients });
+  await updateAccount(a.id, (x) => {
+    x.lastLetter = draft.letter;
+    x.approvedOnce = true;
+    if (x.draft?.createdAt === draft.createdAt) x.draft = null;
+  });
 }

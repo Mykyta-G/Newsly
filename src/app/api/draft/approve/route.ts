@@ -1,4 +1,5 @@
 import { updateAccount } from "@/lib/db";
+import { archiveSent } from "@/lib/drafts";
 import { sendLetter } from "@/lib/email";
 import { currentAccount } from "@/lib/session";
 
@@ -6,7 +7,9 @@ import { currentAccount } from "@/lib/session";
 export async function POST(request: Request) {
   const a = await currentAccount();
   if (!a) return Response.json({ error: "Inte inloggad" }, { status: 401 });
-  const { createdAt, override } = await request.json().catch(() => ({}));
+  const body = await request.json().catch(() => ({}));
+  const createdAt = body.id ?? body.createdAt; // the UI may send the letter id; for drafts id = createdAt
+  const override = body.override;
   const draft = a.draft;
   if (!draft) return Response.json({ error: "Inget utkast" }, { status: 400 });
   if (createdAt !== draft.createdAt) return Response.json({ error: "Utkastet har ändrats, ladda om sidan." }, { status: 409 });
@@ -22,7 +25,7 @@ export async function POST(request: Request) {
   if (!claimed) return Response.json({ error: "Brevet håller redan på att skickas." }, { status: 409 });
   try {
     const sent = await sendLetter(a, draft.letter, a.subscribers);
-    await updateAccount(a.id, (x) => Object.assign(x, { lastLetter: draft.letter, approvedOnce: true }));
+    await archiveSent(a, draft, sent);
     return Response.json({ ok: true, sent });
   } catch (e) {
     await updateAccount(a.id, (x) => void (x.draft ??= draft)); // put it back so they can retry

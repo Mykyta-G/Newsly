@@ -1,6 +1,6 @@
 import { safeEqual } from "@/lib/crypto";
 import { listAccounts, updateAccount } from "@/lib/db";
-import { draftAndTest, lastWeek, makeDraft } from "@/lib/drafts";
+import { archiveSent, draftAndTest, lastWeek, makeDraft } from "@/lib/drafts";
 import { sendLetter } from "@/lib/email";
 
 export const maxDuration = 300;
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         continue;
       }
       const sent = await sendLetter(a, draft.letter, a.subscribers);
-      await updateAccount(a.id, (x) => Object.assign(x, { lastLetter: draft.letter, draft: null }));
+      await archiveSent(a, draft, sent);
       results[a.login] = `skickat till ${sent}`;
     } catch (e) {
       results[a.login] = `fel: ${(e as Error).message}`;
