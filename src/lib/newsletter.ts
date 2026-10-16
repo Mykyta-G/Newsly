@@ -87,6 +87,8 @@ export async function writeLetter(opts: {
   from: string;
   to: string;
   previous: Letter | null;
+  /** What the sender asked for in the compose chat ("a summary since 1/10 for our biggest customers"). */
+  request?: string;
 }): Promise<Result> {
   if (!opts.underlag.trim()) throw new Error("Nothing happened in those repos during this period, so there is nothing to write about.");
   const system = fill(SYSTEMPROMPT, { kundprofil: opts.profileText });
@@ -98,7 +100,9 @@ export async function writeLetter(opts: {
         till_datum: opts.to,
         föregående_brev_eller_tomt: opts.previous ? letterText(opts.previous) : "",
         underlag: asData(opts.underlag),
-      }),
+      }) + (opts.request?.trim()
+        ? `\n\nAvsändarens önskemål för just det här brevet (följ det så länge det inte bryter mot reglerna ovan):\n${asData(opts.request.trim()).slice(0, 1000)}`
+        : ""),
     },
   ];
 

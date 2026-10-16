@@ -26,10 +26,10 @@ export async function gatherUnderlag(a: Account, from: string, to: string) {
   return commitUnderlag(await userToken(a), a.repos, from, to);
 }
 
-export async function makeDraft(a: Account, from: string, to: string): Promise<Draft> {
+export async function makeDraft(a: Account, from: string, to: string, request?: string): Promise<Draft> {
   const underlag = await gatherUnderlag(a, from, to);
   const extraBanned = a.profileKey === "custom" ? [] : PROFILES[a.profileKey].extraBanned;
-  const { letter, status, problems } = await writeLetter({ profileText: profileFor(a), extraBanned, underlag, from, to, previous: a.lastLetter });
+  const { letter, status, problems } = await writeLetter({ profileText: profileFor(a), extraBanned, underlag, from, to, previous: a.lastLetter, request });
   const draft: Draft = {
     from, to, underlag, letter, status, problems,
     html: renderEmail(letter, { companyName: a.companyName, color: a.brandColor }),
@@ -43,10 +43,10 @@ export async function makeDraft(a: Account, from: string, to: string): Promise<D
  * Write a draft, tracked in `account.job` so the UI can show "writing…" or the error.
  * With `test` (first letter, weekly job) it's also emailed to the customer; the UI's "New letter" leaves that to them.
  */
-export async function draftAndTest(a: Account, from: string, to: string, test = true): Promise<Draft> {
+export async function draftAndTest(a: Account, from: string, to: string, test = true, request?: string): Promise<Draft> {
   await updateAccount(a.id, (x) => void (x.job = { state: "running", at: new Date().toISOString() }));
   try {
-    const d = test ? await draftAndTestInner(a, from, to) : await makeDraft(a, from, to);
+    const d = test ? await draftAndTestInner(a, from, to) : await makeDraft(a, from, to, request);
     await updateAccount(a.id, (x) => void (x.job = null));
     return d;
   } catch (e) {

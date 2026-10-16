@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "setup": "bash scripts/setup.sh",
-    "github-oauth": "bash scripts/github-oauth.sh"
+    "github-oauth": "bash scripts/github-oauth.sh",
+    "resend-domain": "bash scripts/resend-domain.sh"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.2",

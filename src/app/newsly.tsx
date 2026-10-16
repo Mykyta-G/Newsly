@@ -28,7 +28,7 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
-const CHECKS = ["No tech words", "No made-up claims", "No hype or exclamation marks", "Length within limit", "Plain text, no emojis"];
+const SUGGESTIONS = ["A letter that sums up everything since 1/10", "A bigger summary of the last month for our biggest customers", "A short thank-you note about what got faster this quarter"];
 const STATUS = {
   sent: { label: "Sent", tag: "tag tag-neutral", dot: "var(--color-neutral-500)" },
   approved: { label: "Approved draft", tag: "tag tag-accent", dot: "var(--color-accent-400)" },
@@ -42,12 +42,12 @@ export default function Newsly({ loginError }: { loginError?: string }) {
   const [letters, setLetters] = useState<Item[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [newOpen, setNewOpen] = useState(false);
+  const [compose, setCompose] = useState(false);
+  const [chat, setChat] = useState<{ role: "user" | "ai"; text: string }[]>([]);
+  const [prompt, setPrompt] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [showSource, setShowSource] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,8 +68,6 @@ export default function Newsly({ loginError }: { loginError?: string }) {
 
   useEffect(() => {
     if (location.search) history.replaceState(null, "", "/");
-    // Fetch on open; state is only set after the requests resolve.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load().then((m) => { if (m && m.repos.length === 0) setSettingsOpen(true); });
   }, [load]);
 
@@ -81,54 +79,61 @@ export default function Newsly({ loginError }: { loginError?: string }) {
     return () => clearInterval(t);
   }, [running, load]);
 
-  async function act(fn: () => Promise<void>) {
+  async function call(fn: () => Promise<unknown>) {
     setBusy(true); setError(null);
-    try { await fn(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    try { await fn(); return true; } catch (e) { setError((e as Error).message); return false; } finally { setBusy(false); }
   }
 
   const q = query.trim().toLowerCase();
   const list = letters.filter((l) => !q || l.title.toLowerCase().includes(q));
   const cur = letters.find((l) => l.id === sel) ?? letters[0] ?? null;
-  const isGenerating = generating || running;
+  const isGenerating = running;
   const hasLetter = !isGenerating && !!cur;
   const isSent = cur?.status === "sent";
+  const review = cur?.status === "needs_review";
   const tested = !!cur?.testSentAt;
   const requireApproval = me?.requireApproval ?? true;
+  const showActions = !!cur && !isSent && !isGenerating;
   const approveDisabled = busy || (requireApproval && !tested) || (me?.subscribers.length ?? 0) === 0;
+  const testLabel = !me?.email ? "Add your email in Settings" : tested ? `Test sent to ${me.email} — send again` : `Send test email to ${me.email}`;
+  const approveLabel = review ? "Override and send" : "Approve and send";
+  const approveTitle = (me?.subscribers.length ?? 0) === 0 ? "Add subscribers in Settings first."
+    : requireApproval && !tested ? "Send yourself a test email first, look it over, then approve."
+    : `Goes out as one email to each of ${me?.subscribers.length} subscribers.`;
 
-  // Default period: the last 7 days, up to today.
+  // Compose: default period is the last 7 days, up to today.
   const openNew = () => {
     setFrom(ymd(new Date(Date.now() - 6 * 864e5)));
     setTo(ymd(new Date()));
-    setNewOpen(true);
+    setChat([]); setPrompt(""); setCompose(true);
   };
 
-  const generate = () => {
-    setNewOpen(false); setGenerating(true); setError(null);
-    api<{ createdAt: string }>("/api/draft", { method: "POST", body: JSON.stringify({ from, to }) })
-      .then(async (d) => { await load(); setSel(d.createdAt); setShowSource(false); })
-      .catch((e) => setError(e.message))
-      .finally(() => setGenerating(false));
-  };
+  async function send() {
+    const text = prompt.trim();
+    if (!text || busy) return;
+    // A date in the prompt (2026-10-01 or 1/10, day/month) overrides the start.
+    let start = from;
+    const iso = text.match(/\d{4}-\d{2}-\d{2}/), dm = text.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+    if (iso) start = iso[0];
+    else if (dm) start = `${to.slice(0, 4)}-${dm[2].padStart(2, "0")}-${dm[1].padStart(2, "0")}`;
+    setChat((c) => [...c, { role: "user", text }, { role: "ai", text: `Reading your work from ${start} to ${to} and writing the letter. This can take up to a minute…` }]);
+    setPrompt(""); setFrom(start); setBusy(true); setError(null);
+    try {
+      const d = await api<{ createdAt: string }>("/api/draft", { method: "POST", body: JSON.stringify({ from: start, to, prompt: text }) });
+      await load();
+      setSel(d.createdAt); setCompose(false); setChat([]);
+    } catch (e) {
+      setChat((c) => [...c, { role: "ai", text: (e as Error).message || "Something went wrong. Try again." }]);
+    } finally { setBusy(false); }
+  }
 
-  const sendTest = () => act(async () => { await api("/api/draft/test", { method: "POST" }); await load(); });
-  const approve = () => act(async () => {
+  const sendTest = () => call(async () => { await api("/api/draft/test", { method: "POST" }); await load(); });
+  const approve = () => call(async () => {
     if (!cur) return;
-    await api("/api/draft/approve", { method: "POST", body: JSON.stringify({ id: cur.id, override: cur.status === "needs_review" }) });
+    await api("/api/draft/approve", { method: "POST", body: JSON.stringify({ createdAt: cur.id, override: review }) });
     await load();
   });
-  const toggleApproval = (checked: boolean) => act(async () => {
-    setMe(await api<Me>("/api/me", { method: "PATCH", body: JSON.stringify({ requireApproval: checked }) }));
-  });
   const logout = () => { fetch("/api/auth/logout", { method: "POST" }).catch(() => {}); setView("welcome"); setMe(null); setLetters([]); };
-
-  const testLabel = !me?.email ? "Add your email in Settings to get a test"
-    : tested ? `Test sent to ${me.email} — send again` : `Send test email to ${me.email}`;
-  const approveHint = (me?.subscribers.length ?? 0) === 0 ? "Add subscribers in Settings first."
-    : cur?.status === "needs_review" ? "This letter failed the check twice. Read it carefully before you send it."
-    : requireApproval && !tested ? "Send yourself a test email first, look it over, then approve."
-    : "Goes out as one email per subscriber.";
-  const approvalNote = requireApproval ? "Turn off to send passing letters automatically. Failed ones always wait for you." : "Passing letters send by themselves each week.";
 
   if (view === "loading") return <div style={{ height: "100vh", background: "#141211" }} />;
 
@@ -137,7 +142,7 @@ export default function Newsly({ loginError }: { loginError?: string }) {
 
       {view === "welcome" && (
         <div style={{ height: "100%", display: "grid", gridTemplateColumns: "minmax(0,1fr)", alignContent: "center", padding: "0 clamp(24px,8vw,140px)", gap: "var(--space-8)" }}>
-          <div style={{ fontSize: 22, fontWeight: 600, fontFamily: "var(--font-heading)", display: "flex", alignItems: "center", gap: 10 }}><span style={{ color: "var(--color-accent-2-500)" }}>●</span>Newsly</div>
+          <div style={{ fontSize: 22, fontWeight: 600, fontFamily: "var(--font-heading)", display: "flex", alignItems: "center", gap: 10 }}><Logo size={34} />Newsly</div>
           <div style={{ maxWidth: 880 }}>
             <h1 style={{ fontSize: "clamp(44px,6.4vw,92px)", lineHeight: 1.02, margin: "0 0 var(--space-6)" }}>Your customers should hear what you shipped.</h1>
             <p style={{ fontSize: 22, lineHeight: 1.5, maxWidth: 620, margin: "0 0 var(--space-8)", color: "var(--color-neutral-400)" }}>Newsly reads this week’s work on GitHub and sends a short, plain-language letter about what customers gain. No jargon. Nothing made up.</p>
@@ -155,7 +160,7 @@ export default function Newsly({ loginError }: { loginError?: string }) {
 
           <aside style={{ display: "flex", flexDirection: "column", minHeight: 0, background: "#0f0d0c", padding: "var(--space-4) var(--space-3) 0" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 var(--space-2) var(--space-4)" }}>
-              <span style={{ fontSize: 26, fontWeight: 600, fontFamily: "var(--font-heading)", letterSpacing: "-0.02em" }}>Newsly</span>
+              <span style={{ fontSize: 26, fontWeight: 600, fontFamily: "var(--font-heading)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 10 }}><Logo size={36} />Newsly</span>
               <button className="btn btn-ghost btn-icon" title="Settings" style={{ color: "var(--color-neutral-400)" }} onClick={() => setSettingsOpen(true)}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="3.2" /><path d="M12 2.8l1.6 2.3 2.8-.5.9 2.7 2.6 1.2-.6 2.8 1.8 2.2-1.8 2.2.6 2.8-2.6 1.2-.9 2.7-2.8-.5L12 21.2l-1.6-2.3-2.8.5-.9-2.7-2.6-1.2.6-2.8L2.9 10.5l1.8-2.2-.6-2.8 2.6-1.2.9-2.7 2.8.5z" strokeLinejoin="round" /></svg>
               </button>
@@ -164,13 +169,13 @@ export default function Newsly({ loginError }: { loginError?: string }) {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l5 5" strokeLinecap="round" /></svg>
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search letters" style={{ flex: 1, minWidth: 0, background: "transparent", border: 0, outline: 0, color: "var(--color-text)", font: "inherit", fontSize: 15 }} />
             </label>
-            <button className="btn btn-secondary" style={{ margin: "var(--space-3) 0 var(--space-4)", justifyContent: "flex-start", gap: 10, minHeight: 42, fontSize: 15 }} onClick={openNew} disabled={isGenerating}>
+            <button className="btn btn-secondary" style={{ margin: "var(--space-3) 0 var(--space-4)", justifyContent: "flex-start", gap: 10, minHeight: 42, fontSize: 15 }} onClick={openNew} disabled={isGenerating || me.repos.length === 0}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>New letter
             </button>
             <div style={{ fontSize: 13, color: "var(--color-neutral-500)", padding: "0 var(--space-2) var(--space-2)", letterSpacing: "0.04em" }}>Letters</div>
             <nav style={{ flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
               {list.map((l) => (
-                <button key={l.id} onClick={() => { setSel(l.id); setShowSource(false); }} style={{ display: "flex", flexDirection: "column", gap: 5, textAlign: "left", cursor: "pointer", border: 0, borderRadius: "var(--radius-md)", padding: "10px 12px", color: "var(--color-text)", background: l.id === cur?.id ? "var(--color-surface)" : "transparent" }}>
+                <button key={l.id} onClick={() => { setSel(l.id); setCompose(false); }} style={{ display: "flex", flexDirection: "column", gap: 5, textAlign: "left", cursor: "pointer", border: 0, borderRadius: "var(--radius-md)", padding: "10px 12px", color: "var(--color-text)", background: l.id === cur?.id ? "var(--color-surface)" : "transparent" }}>
                   <span style={{ fontSize: 16, lineHeight: 1.25 }}>{l.title}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--color-neutral-400)" }}>
                     <span style={{ width: 7, height: 7, borderRadius: "50%", flex: "none", background: STATUS[l.status].dot }} />{STATUS[l.status].label} · {l.period}
@@ -186,8 +191,8 @@ export default function Newsly({ loginError }: { loginError?: string }) {
             </div>
           </aside>
 
-          <main style={{ display: "flex", flexWrap: "wrap", alignContent: "flex-start", overflow: "auto", minHeight: 0, minWidth: 0 }}>
-            <section style={{ flex: "1 1 480px", padding: "var(--space-8) clamp(16px,4vw,64px) 64px", minWidth: 0, boxSizing: "border-box" }}>
+          <main style={{ position: "relative", display: "flex", flexWrap: "wrap", alignContent: "flex-start", overflow: "auto", minHeight: 0, minWidth: 0 }}>
+            <section style={{ flex: "1 1 480px", padding: "88px clamp(16px,4vw,64px) 64px", minWidth: 0, boxSizing: "border-box" }}>
               {error && <div style={{ maxWidth: 660, margin: "0 auto var(--space-4)", fontSize: 15, color: "var(--color-accent-2-400)" }}>{error}</div>}
               {me.job?.state === "failed" && !isGenerating && !cur && <div style={{ maxWidth: 660, margin: "0 auto var(--space-4)", fontSize: 15, color: "var(--color-accent-2-400)" }}>The first letter could not be written: {me.job.error}</div>}
               {isGenerating && (
@@ -228,77 +233,53 @@ export default function Newsly({ loginError }: { loginError?: string }) {
               )}
             </section>
 
-            <aside style={{ flex: "1 1 340px", maxWidth: 400, boxSizing: "border-box", minHeight: "100%", padding: "var(--space-8) var(--space-6)", background: "#0f0d0c" }}>
-              {hasLetter && cur && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
-                  <div>
-                    <span className={STATUS[cur.status].tag}>{STATUS[cur.status].label}</span>
-                    <h2 style={{ fontSize: 26, margin: "var(--space-3) 0 var(--space-1)" }}>{cur.title}</h2>
-                    <div style={{ fontSize: 14, color: "var(--color-neutral-400)" }}>{cur.period}</div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: 13, letterSpacing: "0.06em", color: "var(--color-neutral-400)", marginBottom: "var(--space-2)" }}>Review</div>
-                    {cur.problems.length === 0 ? (
-                      <>
-                        <p style={{ fontSize: 15, lineHeight: 1.5, margin: "0 0 var(--space-3)" }}>Passed the check — no flagged problems.</p>
-                        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8, fontSize: 15 }}>
-                          {CHECKS.map((c) => <li key={c} style={{ display: "flex", gap: 10, alignItems: "baseline" }}><span style={{ color: "var(--color-accent-400)" }}>✓</span><span>{c}</span></li>)}
-                        </ul>
-                      </>
-                    ) : (
-                      <>
-                        <p style={{ fontSize: 15, lineHeight: 1.5, margin: "0 0 var(--space-3)" }}>The check flagged {cur.problems.length === 1 ? "one thing" : `${cur.problems.length} things`}:</p>
-                        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8, fontSize: 15 }}>
-                          {cur.problems.map((p, i) => <li key={i} style={{ display: "flex", gap: 10, alignItems: "baseline" }}><span style={{ color: "var(--color-accent-2-400)" }}>!</span><span>{p.citat ? <>“{p.citat}” — </> : null}<span style={muted}>{p.åtgärd}</span></span></li>)}
-                        </ul>
-                      </>
-                    )}
-                  </div>
-
-                  {isSent && <div style={{ fontSize: 15, lineHeight: 1.5 }}>Sent {cur.sentAt} to <b>{cur.recipients}</b> subscribers, one email each with its own unsubscribe link.</div>}
-
-                  {!isSent && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-                      <div style={{ fontSize: 13, letterSpacing: "0.06em", color: "var(--color-neutral-400)" }}>Send</div>
-                      <button className="btn btn-secondary" style={{ minHeight: 44, fontSize: 15 }} onClick={sendTest} disabled={busy || !me.email}>{testLabel}</button>
-                      <button className="btn btn-primary" style={{ minHeight: 48, fontSize: 16 }} disabled={approveDisabled} onClick={approve}>Approve and send to {cur.recipients} subscribers</button>
-                      <div style={{ fontSize: 13, lineHeight: 1.45, color: "var(--color-neutral-400)" }}>{approveHint}</div>
-                    </div>
-                  )}
-
-                  <label style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer", fontSize: 15, lineHeight: 1.4 }}>
-                    <input type="checkbox" checked={requireApproval} disabled={!me.approvedOnce || busy} onChange={(e) => toggleApproval(e.target.checked)} style={{ marginTop: 4, accentColor: "#2a9fc4", width: 16, height: 16 }} />
-                    <span>Require approval before sending<br /><span style={{ fontSize: 13, color: "var(--color-neutral-400)" }}>{approvalNote}</span></span>
-                  </label>
-
-                  <div>
-                    <button className="btn btn-ghost" style={{ paddingInline: 0, fontSize: 15 }} onClick={() => setShowSource(!showSource)}>{showSource ? "Hide source" : "Show source (what the writer received)"}</button>
-                    {showSource && (
-                      <ul style={{ margin: "var(--space-2) 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6, fontSize: 14, lineHeight: 1.4, color: "var(--color-neutral-300)" }}>
-                        {cur.source.map((u, i) => <li key={i}>{u}</li>)}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              )}
-            </aside>
+            {showActions && (
+              <div style={{ position: "absolute", top: "var(--space-4)", right: "var(--space-6)", display: "flex", gap: "var(--space-2)", alignItems: "center", zIndex: 2 }}>
+                <button className="btn btn-secondary" style={{ minHeight: 42, fontSize: 15, background: "var(--color-bg)" }} onClick={sendTest} disabled={busy || !me.email}>{testLabel}</button>
+                <button className="btn btn-primary" style={{ minHeight: 42, fontSize: 15 }} disabled={approveDisabled} onClick={approve} title={approveTitle}>{approveLabel}</button>
+              </div>
+            )}
           </main>
         </div>
       )}
 
-      {newOpen && (
-        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", display: "grid", placeItems: "center", zIndex: 5 }} onClick={() => setNewOpen(false)}>
-          <div className="dialog" style={{ width: "min(440px,92vw)" }} onClick={(e) => e.stopPropagation()}>
-            <h3 className="dialog-title" style={{ fontSize: 24 }}>New letter</h3>
-            <div className="dialog-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-              <div style={{ fontSize: 15, color: "var(--color-neutral-300)" }}>Pick the period Newsly should read from GitHub.</div>
-              <div className="field"><label>From</label><input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-              <div className="field"><label>To</label><input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+      {compose && (
+        <div style={{ position: "absolute", left: 304, top: 0, right: 0, bottom: 0, zIndex: 4, background: "var(--color-bg)", display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <div style={{ padding: "var(--space-4) var(--space-6)" }}><button className="btn btn-ghost" style={{ fontSize: 15, paddingInline: 0 }} onClick={() => setCompose(false)}>← Back to letters</button></div>
+          <div style={{ flex: 1, overflow: "auto", padding: "0 clamp(16px,5vw,80px)" }}>
+            <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: "var(--space-6)", paddingBottom: "var(--space-6)" }}>
+              {chat.length === 0 && (
+                <div style={{ paddingTop: "8vh" }}>
+                  <h1 style={{ fontSize: "clamp(34px,4.6vw,56px)", lineHeight: 1.05, margin: "0 0 var(--space-3)" }}>What should this letter say?</h1>
+                  <p style={{ fontSize: 19, lineHeight: 1.5, margin: "0 0 var(--space-6)", color: "var(--color-neutral-400)", maxWidth: 560 }}>Describe the letter you want. Newsly reads your GitHub work for the period and writes it in plain language.</p>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "var(--space-2)" }}>
+                    {SUGGESTIONS.map((t) => <button key={t} className="btn btn-secondary" style={{ fontSize: 15, textAlign: "left", minHeight: 42, height: "auto", paddingBlock: 8 }} onClick={() => setPrompt(t)}>{t}</button>)}
+                  </div>
+                </div>
+              )}
+              {chat.map((m, i) => (
+                <div key={i} style={m.role === "user" ? { paddingLeft: "var(--space-6)" } : undefined}>
+                  <div style={{ fontSize: 12, letterSpacing: "0.06em", marginBottom: 6, color: m.role === "user" ? "var(--color-neutral-400)" : "var(--color-accent-400)" }}>{m.role === "user" ? "You" : "Newsly"}</div>
+                  <div style={{ fontSize: 18, lineHeight: 1.55 }}>{m.text}</div>
+                </div>
+              ))}
             </div>
-            <div className="dialog-actions">
-              <button className="btn btn-ghost" onClick={() => setNewOpen(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={generate} disabled={!from || !to || from > to || me?.repos.length === 0}>Write letter</button>
+          </div>
+          <div style={{ padding: "var(--space-3) clamp(16px,5vw,80px) var(--space-6)" }}>
+            <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+              <div style={{ display: "flex", gap: "var(--space-4)", alignItems: "center", flexWrap: "wrap", fontSize: 14, color: "var(--color-neutral-400)" }}>
+                <span>Period</span>
+                <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: "auto" }} />
+                <span>to</span>
+                <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: "auto" }} />
+                <span style={{ fontSize: 13 }}>A date in your prompt (2026-10-01 or 1/10) overrides the start.</span>
+              </div>
+              <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "flex-end" }}>
+                <textarea className="input" rows={2} placeholder="e.g. A letter that sums up everything since 1/10" value={prompt} onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                  style={{ flex: 1, minHeight: 64, fontSize: 17, padding: "12px 14px", resize: "none" }} />
+                <button className="btn btn-primary" style={{ minHeight: 64, paddingInline: 24, fontSize: 16 }} disabled={busy || !prompt.trim()} onClick={send}>Write</button>
+              </div>
             </div>
           </div>
         </div>
@@ -307,6 +288,12 @@ export default function Newsly({ loginError }: { loginError?: string }) {
       {settingsOpen && me && <Settings me={me} onClose={() => setSettingsOpen(false)} onSaved={async () => { setSettingsOpen(false); await load(); }} onDeleted={() => { setSettingsOpen(false); setView("welcome"); setMe(null); setLetters([]); }} />}
     </div>
   );
+}
+
+/** The Newsly mark: the serif N printed as misregistered cyan and magenta plates. */
+function Logo({ size }: { size: number }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/logo.svg" alt="" width={size} height={size} style={{ display: "block", flex: "none" }} />;
 }
 
 /** Settings dialog, in the design system's dialog/field/input classes: repos, recipients, sender, test address. */
